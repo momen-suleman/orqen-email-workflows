@@ -1,0 +1,24 @@
+{
+  "name": "Transactional email",
+  "description": "Request to send one templated notification (receipt, password reset, shipping update…).",
+  "properties": {
+    "to": {
+      "type": "string"
+    },
+    "template_id": {
+      "type": "string"
+    },
+    "variables": {
+      "type": "object"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Stable per business event, e.g. order-1042-shipped"
+    }
+  },
+  "required": [
+    "to",
+    "template_id",
+    "idempotency_key"
+  ]
+}

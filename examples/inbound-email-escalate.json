@@ -1,0 +1,7 @@
+{
+  "message_id": "<CAF5678@mail.example.org>",
+  "from": "grace@example.org",
+  "from_name": "Grace",
+  "subject": "URGENT: charged twice",
+  "body": "I was charged twice for order 2001 and want a refund today."
+}

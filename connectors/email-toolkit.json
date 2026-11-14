@@ -1,0 +1,10 @@
+{
+  "name": "Email toolkit",
+  "description": "email-toolkit REST surface (POST /executions, GET /mailbox, …). Real HTTP status codes; idempotent sends.",
+  "baseUrl": "http://127.0.0.1:9333",
+  "credential": "@email-toolkit-key",
+  "timeoutSecs": 45,
+  "headers": {
+    "X-Orqen-Library": "orqen-email-workflows"
+  }
+}

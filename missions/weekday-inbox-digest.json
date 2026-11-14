@@ -1,0 +1,20 @@
+{
+  "name": "Weekday inbox digest",
+  "description": "Sends the inbox digest at 08:00 UTC Monday–Friday. Disabled until IMAP is configured on email-toolkit.",
+  "workflows": [
+    "@inbox-triage-digest"
+  ],
+  "mode": "scheduled",
+  "scheduleAt": "08:00",
+  "scheduleDays": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "timezoneOffsetMinutes": 0,
+  "enabled": false,
+  "env": "@email-local",
+  "defaultDocument": "{}"
+}

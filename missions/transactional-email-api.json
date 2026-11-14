@@ -1,0 +1,11 @@
+{
+  "name": "Transactional email API",
+  "description": "Webhook entry point for systems that need to send templated notifications.",
+  "workflows": [
+    "@transactional-notification"
+  ],
+  "mode": "webhook",
+  "enabled": true,
+  "env": "@email-local",
+  "defaultDocument": ""
+}

@@ -1,0 +1,7 @@
+{
+  "name": "CRM API",
+  "description": "Customer lookup by email. Replace the base URL with your CRM; used only when CRM_ENABLED is true.",
+  "baseUrl": "https://crm.example.com/api",
+  "credential": "@crm-token",
+  "timeoutSecs": 10
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Support inbox webhook",
+  "description": "Run Support auto-reply for each inbound email POSTed to /api/hooks/<id> (issue a token on the Workflows page).",
+  "workflows": [
+    "@support-auto-reply"
+  ],
+  "mode": "webhook",
+  "enabled": true,
+  "env": "@email-local",
+  "defaultDocument": ""
+}

@@ -1,0 +1,136 @@
+{
+  "name": "Inbox triage digest",
+  "description": "Fetch unread mail over IMAP, summarize it by urgency with AI, and send one digest per day (idempotent per date). Remembers the last digest in the context database.",
+  "graph": {
+    "settings": {
+      "failureMode": "failFast",
+      "statusPolicy": "handled"
+    },
+    "nodes": [
+      {
+        "id": "fetch",
+        "label": "Fetch unread mail",
+        "capability": "http.request",
+        "x": 300,
+        "y": 240,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "GET",
+          "url": "/mailbox?unseen_only=true&limit=25"
+        },
+        "policy": {
+          "retries": 2,
+          "retryDelayMs": 3000
+        }
+      },
+      {
+        "id": "mailbox-down",
+        "label": "Mailbox unavailable",
+        "capability": "text.template",
+        "x": 560,
+        "y": 440,
+        "params": {
+          "template": "Digest skipped {{ sys.now }}: {{ node.fetch.error }}"
+        }
+      },
+      {
+        "id": "summarize",
+        "label": "Summarize by urgency",
+        "capability": "ai.chat",
+        "x": 560,
+        "y": 200,
+        "params": {
+          "skills": [
+            "@email-triage"
+          ],
+          "maxTokens": 900
+        },
+        "inputs": {
+          "text": {
+            "from": "template",
+            "value": "Unread messages (JSON):\n{{ node.fetch.body }}"
+          }
+        },
+        "policy": {
+          "retries": 1,
+          "retryDelayMs": 2000,
+          "onError": "fallback",
+          "fallback": {
+            "text": "The AI summary could not be generated today — please review the inbox directly."
+          }
+        }
+      },
+      {
+        "id": "digest",
+        "label": "Send digest",
+        "capability": "http.request",
+        "x": 820,
+        "y": 200,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{\n  \"action\": \"send\",\n  \"from\": {{ ctx.NOTIFY_FROM | json }},\n  \"to\": [{{ ctx.DIGEST_TO | json }}],\n  \"subject\": \"Inbox digest — {{ sys.today }}\",\n  \"body_text\": \"{{ node.summarize.text | trim | escape }}\\n\\nPrevious digest: {{ kv.email.last_digest.sent_at | default:'none recorded' | escape }}\",\n  \"idempotency_key\": \"digest-{{ sys.today }}\"\n}",
+          "select": "execution_id",
+          "acceptStatus": [
+            409
+          ]
+        },
+        "policy": {
+          "retries": 2,
+          "retryDelayMs": 2000
+        }
+      },
+      {
+        "id": "remember",
+        "label": "Remember last digest",
+        "capability": "context.kv_set",
+        "x": 1080,
+        "y": 200,
+        "params": {
+          "namespace": "email",
+          "key": "last_digest"
+        },
+        "inputs": {
+          "text": {
+            "from": "template",
+            "value": "{\"sent_at\": \"{{ sys.now }}\", \"execution_id\": {{ node.digest.text | json }}}"
+          }
+        },
+        "policy": {
+          "runIf": "{{ ctx.EMAIL_AUDIT_LOG | default:false }} == true",
+          "onError": "continue"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "fetch",
+        "to": "summarize"
+      },
+      {
+        "from": "fetch",
+        "to": "mailbox-down",
+        "when": "failure"
+      },
+      {
+        "from": "summarize",
+        "to": "digest"
+      },
+      {
+        "from": "digest",
+        "to": "remember"
+      }
+    ],
+    "layout": {
+      "trigger": {
+        "x": 40,
+        "y": 240
+      },
+      "triggerEdges": [
+        "fetch"
+      ],
+      "notes": []
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "message_id": "<CAF1234@mail.example.org>",
+  "from": "ada@example.org",
+  "from_name": "Ada",
+  "subject": "Cannot download my invoice",
+  "body": "Hi, the invoice for order 1042 gives me an error when I try to download it. Can you help?",
+  "received_at": "2026-11-14T09:12:00Z"
+}

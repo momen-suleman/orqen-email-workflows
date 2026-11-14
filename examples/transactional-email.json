@@ -1,0 +1,8 @@
+{
+  "to": "ada@example.org",
+  "template_id": "welcome",
+  "variables": {
+    "name": "Ada"
+  },
+  "idempotency_key": "signup-ada-2026-11-14"
+}

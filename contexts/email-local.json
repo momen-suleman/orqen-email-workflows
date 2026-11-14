@@ -1,0 +1,43 @@
+{
+  "name": "Email local",
+  "scope": "env",
+  "description": "Local email-toolkit on 127.0.0.1:9333. Copy as 'Email production' and change the addresses for prod.",
+  "variables": [
+    {
+      "key": "SUPPORT_FROM",
+      "value": "support@example.com"
+    },
+    {
+      "key": "SUPPORT_TEAM_EMAIL",
+      "value": "support-team@example.com"
+    },
+    {
+      "key": "SUPPORT_SIGNATURE",
+      "value": "— The Example Support Team"
+    },
+    {
+      "key": "NOTIFY_FROM",
+      "value": "no-reply@example.com"
+    },
+    {
+      "key": "DIGEST_TO",
+      "value": "ops@example.com"
+    },
+    {
+      "key": "CRM_ENABLED",
+      "value": "false"
+    },
+    {
+      "key": "EMAIL_AUDIT_LOG",
+      "value": "false"
+    },
+    {
+      "key": "EMAIL_TOOLKIT_API_KEY",
+      "secret": true
+    },
+    {
+      "key": "CRM_API_TOKEN",
+      "secret": true
+    }
+  ]
+}

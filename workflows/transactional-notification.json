@@ -1,0 +1,106 @@
+{
+  "name": "Transactional notification",
+  "description": "Validate a notification request, then send a template-rendered email exactly once per idempotency key, retrying transient failures; report a structured failure otherwise.",
+  "graph": {
+    "inputType": "@transactional-email",
+    "settings": {
+      "failureMode": "failFast",
+      "statusPolicy": "strict"
+    },
+    "nodes": [
+      {
+        "id": "check",
+        "label": "Validate request",
+        "capability": "data.validate",
+        "x": 300,
+        "y": 240,
+        "params": {
+          "rules": [
+            {
+              "path": "to",
+              "required": true,
+              "format": "email"
+            },
+            {
+              "path": "template_id",
+              "required": true,
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "path": "idempotency_key",
+              "required": true,
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            },
+            {
+              "path": "variables",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      {
+        "id": "send",
+        "label": "Send templated email",
+        "capability": "http.request",
+        "x": 580,
+        "y": 160,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{\"action\": \"send\", \"from\": {{ ctx.NOTIFY_FROM | json }}, \"to\": [{{ run.to | json }}], \"template_id\": {{ run.template_id | json }}, \"template_vars\": {{ run.variables | default:'{}' }}, \"idempotency_key\": {{ run.idempotency_key | json }}, \"correlation_id\": {{ run.idempotency_key | json }}}",
+          "select": "execution_id",
+          "acceptStatus": [
+            409
+          ]
+        },
+        "policy": {
+          "retries": 3,
+          "retryDelayMs": 1000
+        }
+      },
+      {
+        "id": "failure-report",
+        "label": "Failure report",
+        "capability": "text.template",
+        "x": 580,
+        "y": 380,
+        "params": {
+          "template": "{\"status\": \"failed\", \"idempotency_key\": {{ run.idempotency_key | default:'' | json }}, \"validation_error\": {{ node.check.error | default:'' | json }}, \"send_error\": {{ node.send.error | default:'' | json }}}"
+        },
+        "policy": {
+          "join": "any"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "check",
+        "to": "send"
+      },
+      {
+        "from": "check",
+        "to": "failure-report",
+        "when": "failure"
+      },
+      {
+        "from": "send",
+        "to": "failure-report",
+        "when": "failure"
+      }
+    ],
+    "layout": {
+      "trigger": {
+        "x": 40,
+        "y": 240
+      },
+      "triggerEdges": [
+        "check"
+      ],
+      "notes": []
+    }
+  }
+}

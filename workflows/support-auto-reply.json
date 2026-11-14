@@ -1,0 +1,332 @@
+{
+  "name": "Support auto-reply",
+  "description": "Validate an inbound email, enrich it from the CRM, route urgent/refund/VIP mail to the team, draft an on-brand reply with AI, preflight it against email policy, send it idempotently, and escalate whenever anything is blocked or fails.",
+  "graph": {
+    "inputType": "@inbound-email",
+    "settings": {
+      "failureMode": "failFast",
+      "statusPolicy": "handled"
+    },
+    "nodes": [
+      {
+        "id": "intake",
+        "label": "Validate inbound email",
+        "capability": "data.validate",
+        "x": 300,
+        "y": 300,
+        "params": {
+          "rules": [
+            {
+              "path": "message_id",
+              "required": true,
+              "type": "string",
+              "minLength": 3
+            },
+            {
+              "path": "from",
+              "required": true,
+              "format": "email"
+            },
+            {
+              "path": "subject",
+              "required": true,
+              "type": "string",
+              "maxLength": 998
+            },
+            {
+              "path": "body",
+              "required": true,
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000
+            }
+          ]
+        }
+      },
+      {
+        "id": "reject",
+        "label": "Rejected input report",
+        "capability": "text.template",
+        "x": 560,
+        "y": 540,
+        "params": {
+          "template": "{\"status\": \"rejected\", \"message_id\": {{ run.message_id | default:'' | json }}, \"reason\": {{ node.intake.error | json }}}"
+        }
+      },
+      {
+        "id": "crm",
+        "label": "Look up customer",
+        "capability": "http.request",
+        "x": 560,
+        "y": 100,
+        "params": {
+          "connector": "@crm-api",
+          "method": "GET",
+          "url": "/customers?email={{ run.from | url }}",
+          "select": "data.0"
+        },
+        "policy": {
+          "runIf": "{{ ctx.CRM_ENABLED | default:false }} == true",
+          "retries": 2,
+          "retryDelayMs": 500,
+          "timeoutSecs": 10,
+          "onError": "continue"
+        }
+      },
+      {
+        "id": "route",
+        "label": "Route",
+        "capability": "flow.switch",
+        "x": 820,
+        "y": 300,
+        "params": {
+          "cases": [
+            {
+              "name": "escalate",
+              "condition": "{{ run.subject }} contains urgent"
+            },
+            {
+              "name": "escalate",
+              "condition": "{{ run.body }} contains refund"
+            },
+            {
+              "name": "escalate",
+              "condition": "{{ run.body }} contains lawyer"
+            },
+            {
+              "name": "escalate",
+              "condition": "{{ node.crm.text.tier | default:standard }} == vip"
+            }
+          ],
+          "default": "auto-reply"
+        }
+      },
+      {
+        "id": "draft",
+        "label": "Draft reply",
+        "capability": "ai.chat",
+        "x": 1080,
+        "y": 180,
+        "params": {
+          "skills": [
+            "@brand-voice",
+            "@support-reply-writer"
+          ],
+          "maxTokens": 600
+        },
+        "inputs": {
+          "text": {
+            "from": "template",
+            "value": "Customer: {{ run.from_name | default:'unknown' }} <{{ run.from }}>\nTier: {{ node.crm.text.tier | default:'standard' }}\nSubject: {{ run.subject }}\n\n{{ run.body }}"
+          }
+        },
+        "policy": {
+          "retries": 1,
+          "retryDelayMs": 2000,
+          "onError": "fallback",
+          "fallback": {
+            "text": "Thanks for getting in touch. We have received your message and a member of our team will reply within one business day."
+          }
+        }
+      },
+      {
+        "id": "message",
+        "label": "Compose reply",
+        "capability": "text.template",
+        "x": 1340,
+        "y": 180,
+        "params": {
+          "template": "{\n  \"from\": {{ ctx.SUPPORT_FROM | json }},\n  \"to\": [{{ run.from | json }}],\n  \"subject\": \"Re: {{ run.subject | escape }}\",\n  \"body_text\": \"{{ node.draft.text | trim | escape }}\\n\\n{{ ctx.SUPPORT_SIGNATURE | default:'— Customer Support' | escape }}\",\n  \"thread_id\": {{ run.message_id | json }},\n  \"in_reply_to\": {{ run.message_id | json }},\n  \"idempotency_key\": \"reply-{{ run.message_id | escape }}\",\n  \"correlation_id\": {{ run.message_id | json }}\n}"
+        }
+      },
+      {
+        "id": "preflight",
+        "label": "Policy preflight",
+        "capability": "http.request",
+        "x": 1600,
+        "y": 180,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{\"action\": \"validate\", \"for_action\": \"reply\", {{ node.message.text | fields }}}"
+        },
+        "policy": {
+          "retries": 2,
+          "retryDelayMs": 1000
+        }
+      },
+      {
+        "id": "checks",
+        "label": "Allowed to send?",
+        "capability": "flow.if",
+        "x": 1860,
+        "y": 180,
+        "params": {
+          "condition": "{{ node.preflight.body.valid }} == true"
+        }
+      },
+      {
+        "id": "send",
+        "label": "Send reply",
+        "capability": "http.request",
+        "x": 2120,
+        "y": 80,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{\"action\": \"reply\", {{ node.message.text | fields }}}",
+          "select": "execution_id",
+          "acceptStatus": [
+            409
+          ]
+        },
+        "policy": {
+          "retries": 2,
+          "retryDelayMs": 2000
+        }
+      },
+      {
+        "id": "notify-team",
+        "label": "Escalate to team",
+        "capability": "http.request",
+        "x": 2120,
+        "y": 400,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{\n  \"action\": \"send\",\n  \"from\": {{ ctx.SUPPORT_FROM | json }},\n  \"to\": [{{ ctx.SUPPORT_TEAM_EMAIL | json }}],\n  \"subject\": \"[Needs attention] {{ run.subject | escape }}\",\n  \"body_text\": \"Message {{ run.message_id | escape }} from {{ run.from | escape }} needs a person.\\n\\nRoute: {{ node.route.branch | default:'n/a' | escape }}\\nCustomer tier: {{ node.crm.text.tier | default:'unknown' | escape }}\\nPreflight: {{ node.preflight.body | default:'not run' | escape }}\\nSend error: {{ node.send.error | default:'none' | escape }}\\n\\n----- Original message -----\\n{{ run.body | escape }}\",\n  \"idempotency_key\": \"escalate-{{ run.message_id | escape }}\",\n  \"correlation_id\": {{ run.message_id | json }}\n}",
+          "select": "execution_id",
+          "acceptStatus": [
+            409
+          ]
+        },
+        "policy": {
+          "join": "any",
+          "retries": 2,
+          "retryDelayMs": 2000
+        }
+      },
+      {
+        "id": "audit",
+        "label": "Audit log",
+        "capability": "context.kv_set",
+        "x": 2380,
+        "y": 260,
+        "params": {
+          "namespace": "support",
+          "key": "reply-{{ run.message_id }}"
+        },
+        "inputs": {
+          "text": {
+            "from": "template",
+            "value": "{\"message_id\": {{ run.message_id | json }}, \"route\": {{ node.route.branch | default:'' | json }}, \"reply_execution\": {{ node.send.text | default:'' | json }}, \"reply_status\": {{ node.send.status | default:0 }}, \"escalation_execution\": {{ node.notify-team.text | default:'' | json }}, \"at\": \"{{ sys.now }}\"}"
+          }
+        },
+        "policy": {
+          "join": "any",
+          "runIf": "{{ ctx.EMAIL_AUDIT_LOG | default:false }} == true",
+          "onError": "continue"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "intake",
+        "to": "crm"
+      },
+      {
+        "from": "intake",
+        "to": "route"
+      },
+      {
+        "from": "intake",
+        "to": "reject",
+        "when": "failure"
+      },
+      {
+        "from": "route",
+        "to": "draft",
+        "when": "case:auto-reply"
+      },
+      {
+        "from": "route",
+        "to": "notify-team",
+        "when": "case:escalate"
+      },
+      {
+        "from": "draft",
+        "to": "message"
+      },
+      {
+        "from": "message",
+        "to": "preflight"
+      },
+      {
+        "from": "preflight",
+        "to": "checks"
+      },
+      {
+        "from": "preflight",
+        "to": "notify-team",
+        "when": "failure"
+      },
+      {
+        "from": "checks",
+        "to": "send",
+        "when": "case:true"
+      },
+      {
+        "from": "checks",
+        "to": "notify-team",
+        "when": "case:false"
+      },
+      {
+        "from": "send",
+        "to": "notify-team",
+        "when": "failure"
+      },
+      {
+        "from": "send",
+        "to": "audit",
+        "when": "always"
+      },
+      {
+        "from": "notify-team",
+        "to": "audit",
+        "when": "always"
+      }
+    ],
+    "layout": {
+      "trigger": {
+        "x": 40,
+        "y": 300
+      },
+      "triggerEdges": [
+        "intake"
+      ],
+      "notes": [
+        {
+          "id": "note-1",
+          "x": 820,
+          "y": 520,
+          "w": 380,
+          "h": 120,
+          "color": "#20313a",
+          "text": "Route reads the CRM tier through {{ node.crm.text.tier | default:standard }} — a data reference, so it still runs when the CRM lookup is disabled (CRM_ENABLED=false)."
+        },
+        {
+          "id": "note-2",
+          "x": 1600,
+          "y": 420,
+          "w": 400,
+          "h": 120,
+          "color": "#3a2226",
+          "text": "Escalate waits for ANY of: route=escalate, preflight blocked (checks=false), preflight or send failed. A handled failure ends the run Degraded (status policy: handled)."
+        }
+      ]
+    }
+  }
+}

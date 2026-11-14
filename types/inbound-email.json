@@ -1,0 +1,33 @@
+{
+  "name": "Inbound email",
+  "description": "A received message handed to the support workflow (from a mail hook, the mailbox or another system).",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "RFC 5322 Message-ID of the received message"
+    },
+    "from": {
+      "type": "string",
+      "description": "Sender address"
+    },
+    "from_name": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string",
+      "description": "Plain-text body"
+    },
+    "received_at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message_id",
+    "from",
+    "subject",
+    "body"
+  ]
+}
