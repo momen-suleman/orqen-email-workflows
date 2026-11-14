@@ -152,8 +152,10 @@ class LibraryTests(unittest.TestCase):
 
     def test_manifest(self):
         manifest = json.loads((ROOT / "orqen.json").read_text(encoding="utf-8"))
-        for key in ("name", "version", "description"):
+        for key in ("name", "version", "description", "orqen"):
             self.assertTrue(manifest.get(key), key)
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$", "library version must be semver")
+        self.assertRegex(manifest["orqen"], r"^(>=|\^|=)?\d+\.\d+(\.\d+)?$", "orqen requirement")
 
     def test_credentials_hold_no_literal_secrets(self):
         for name, cred in load("credentials").items():

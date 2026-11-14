@@ -11,8 +11,11 @@ Email delivery goes through
 HTTP status codes, a bearer key resolved per environment, and the toolkit's
 idempotency, so a retried or re-delivered message is never sent twice.
 
-Requires Orqen **0.10** or later (input sources, connectors, branches, error
-policies, `flow.*` and `data.*` nodes).
+Requires Orqen **0.10.0** or later (input sources, connectors, branches,
+error policies, `flow.*` and `data.*` nodes). The manifest declares
+`"orqen": ">=0.10.0"`, so an older engine refuses the import instead of
+failing later. Releases are tagged `vX.Y.Z` (see [CHANGELOG](CHANGELOG.md)):
+pin a Studio to one by entering the tag in the Library's *ref* field.
 
 ## What you get
 
