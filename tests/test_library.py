@@ -174,6 +174,8 @@ class LibraryTests(unittest.TestCase):
         # Bodies are rendered before the run even when run-if skips the node,
         # so a raw-message run (no uid) needs a default.
         self.assertIn("run.uid | default:''", nodes["fetch"]["params"]["body"])
+        self.assertIn("run.account | default:''", nodes["fetch"]["params"]["body"],
+                      "the run names the mailbox; the planner's apply request echoes it")
         self.assertEqual(apply["policy"].get("retries", 0), 0, "a move is not idempotent: never retry it blindly")
         self.assertEqual(apply["params"]["body"], "{{ node.plan.request }}",
                          "the request comes from the planner, not from run input")

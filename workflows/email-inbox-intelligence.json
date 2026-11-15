@@ -1,6 +1,6 @@
 {
   "name": "Email Inbox Intelligence",
-  "description": "Fetch a message by IMAP UID through email-toolkit (or take a raw message), parse it, extract metadata and content, evaluate security indicators, classify with deterministic rules, then plan mailbox actions. Dry-run unless MAIL_MODE=apply; only mark_read and archive are allow-listed. No language model.",
+  "description": "Fetch a message by IMAP UID through email-toolkit (or take a raw message), parse it, extract metadata and content, evaluate security indicators, classify with deterministic rules, then plan mailbox actions. Dry-run unless MAIL_MODE=apply; only mark_read and archive are allow-listed. Name a mailbox with \"account\" (default: the default mailbox). No language model.",
   "graph": {
     "settings": {
       "failureMode": "failFast",
@@ -17,7 +17,7 @@
           "connector": "@email-toolkit",
           "method": "POST",
           "url": "/executions",
-          "body": "{\"action\": \"mailbox.get_raw\", \"uid\": {{ run.uid | default:'' | json }}, \"folder\": {{ run.folder | default:INBOX | json }}}"
+          "body": "{\"action\": \"mailbox.get_raw\", \"uid\": {{ run.uid | default:'' | json }}, \"folder\": {{ run.folder | default:INBOX | json }}, \"account\": {{ run.account | default:'' | json }}}"
         },
         "policy": {
           "runIf": "{{ run.uid | default:'' }}",

@@ -4,6 +4,10 @@ This library follows [semantic versioning](https://semver.org): a breaking
 change to a workflow's input type, a connector, or a context variable bumps
 the major version. Each release is a git tag `vX.Y.Z`.
 
+## 1.3.0
+
+- **Several mailboxes.** Email Inbox Intelligence passes the run's `account` to email-toolkit, so a run can read any mailbox the toolkit serves (`{"uid": "42", "account": "sales"}`); the planned mailbox actions go to the same mailbox. Without `account` nothing changes: the default mailbox is used. Needs email-toolkit with accounts to address a mailbox other than the default; older toolkits ignore the field.
+
 ## 1.2.0
 
 - **Inbox intelligence poll** mission: every 5 minutes, runs Email Inbox Intelligence once for each unread message not processed before (up to 10 per poll), through a mission `feed` on the email-toolkit connector. Installed disabled. Needs an Orqen build with mission feeds; older builds install it as a plain scheduled mission that has no input.

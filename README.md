@@ -123,7 +123,9 @@ fetch (run if uid) ─▶ parse ─▶ meta ─▶ content ─▶ security ─�
 ```
 
 Input is `{"uid": "<IMAP UID>", "folder": "INBOX"}` or `{"raw": "<RFC 5322 message>"}`
-(see `examples/inbox-intelligence-*.json`).
+(see `examples/inbox-intelligence-*.json`). Add `"account": "<mailbox id>"`
+to read a mailbox other than the default one; any mailbox action then goes to
+that same mailbox. Mailboxes are added in Orqen Studio → **Mailboxes**.
 
 **It is read-only until you change three things.** `MAIL_MODE` is `dry-run`
 in *Email local*; the plan node allow-lists only `mark_read` and `archive`,
@@ -143,9 +145,11 @@ retried, because a move is not idempotent; a failed apply ends the run
 | Raw message | Fetch skipped; actions `unsupported` (no mailbox) |
 
 **Automatic processing.** Enable *Inbox intelligence poll* once the dry-run
-reports look right. It polls email-toolkit for unread mail and runs each new
-message once (it remembers UIDs, retries a failed message three times, and
-needs an Orqen build with mission feeds).
+reports look right. It polls email-toolkit for unread mail of the **default
+mailbox** and runs each new message once (it remembers UIDs, retries a failed
+message three times, and needs an Orqen build with mission feeds). For any
+other mailbox, open it in Studio → Mailboxes and choose *Create a mission*:
+that copies this mission with the mailbox's id in the feed.
 
 Rules, fields and the confidence formula: Orqen's `docs/EMAIL_CAPABILITIES.md`.
 
