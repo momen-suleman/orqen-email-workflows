@@ -1,0 +1,168 @@
+{
+  "name": "Email Inbox Intelligence",
+  "description": "Fetch a message by IMAP UID through email-toolkit (or take a raw message), parse it, extract metadata and content, evaluate security indicators, classify with deterministic rules, then plan mailbox actions. Dry-run unless MAIL_MODE=apply; only mark_read and archive are allow-listed. No language model.",
+  "graph": {
+    "settings": {
+      "failureMode": "failFast",
+      "statusPolicy": "handled"
+    },
+    "nodes": [
+      {
+        "id": "fetch",
+        "label": "Fetch raw message",
+        "capability": "http.request",
+        "x": 300,
+        "y": 220,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{\"action\": \"mailbox.get_raw\", \"uid\": {{ run.uid | default:'' | json }}, \"folder\": {{ run.folder | default:INBOX | json }}}"
+        },
+        "policy": {
+          "runIf": "{{ run.uid | default:'' }}",
+          "retries": 2,
+          "retryDelayMs": 1000
+        }
+      },
+      {
+        "id": "parse",
+        "label": "Parse message",
+        "capability": "mail.message.parse",
+        "x": 560,
+        "y": 220,
+        "params": {},
+        "inputs": {
+          "text": {
+            "from": "template",
+            "value": "{{ node.fetch.text | default:'' }}{{ run.raw | default:'' }}"
+          }
+        }
+      },
+      {
+        "id": "meta",
+        "label": "Headers & metadata",
+        "capability": "mail.metadata.extract",
+        "x": 820,
+        "y": 220,
+        "params": {}
+      },
+      {
+        "id": "content",
+        "label": "Content & links",
+        "capability": "mail.content.extract",
+        "x": 1080,
+        "y": 220,
+        "params": {}
+      },
+      {
+        "id": "security",
+        "label": "Security indicators",
+        "capability": "mail.security.assess",
+        "x": 1340,
+        "y": 220,
+        "params": {}
+      },
+      {
+        "id": "classify",
+        "label": "Classify (rules)",
+        "capability": "mail.rules.classify",
+        "x": 1600,
+        "y": 220,
+        "params": {
+          "defaultCategory": "uncategorized"
+        }
+      },
+      {
+        "id": "plan",
+        "label": "Plan actions",
+        "capability": "mail.actions.plan",
+        "x": 1860,
+        "y": 220,
+        "params": {
+          "allow": ["mark_read", "archive"],
+          "minConfidence": 70
+        },
+        "inputs": {
+          "mode": {
+            "from": "template",
+            "value": "{{ ctx.MAIL_MODE | default:dry-run }}"
+          }
+        }
+      },
+      {
+        "id": "apply",
+        "label": "Apply permitted actions",
+        "capability": "http.request",
+        "x": 2120,
+        "y": 120,
+        "params": {
+          "connector": "@email-toolkit",
+          "method": "POST",
+          "url": "/executions",
+          "body": "{{ node.plan.request }}"
+        },
+        "policy": {
+          "runIf": "{{ node.plan.mutate }} == true",
+          "failOn": "error"
+        }
+      },
+      {
+        "id": "apply-failed",
+        "label": "Apply failure report",
+        "capability": "text.template",
+        "x": 2380,
+        "y": 40,
+        "params": {
+          "template": "{\"status\": \"apply_failed\", \"fingerprint\": {{ node.classify.text.message.fingerprint | json }}, \"error\": {{ node.apply.error | json }}}"
+        }
+      },
+      {
+        "id": "report",
+        "label": "Result & metrics",
+        "capability": "text.template",
+        "x": 2380,
+        "y": 260,
+        "params": {
+          "template": "{\"uid\": {{ run.uid | default:'' | json }}, \"fingerprint\": {{ node.classify.text.message.fingerprint | json }}, \"category\": {{ node.classify.category | json }}, \"confidence\": {{ node.classify.confidence }}, \"priority\": {{ node.classify.priority | json }}, \"labels\": {{ node.classify.labels | json }}, \"security\": {\"verdict\": {{ node.security.verdict | json }}, \"score\": {{ node.security.risk_score }}}, \"mode\": {{ node.plan.text.mode | json }}, \"actions\": {{ node.plan.text.actions | json }}, \"needs_review\": {{ node.plan.needs_review }}, \"applied\": {{ node.apply.text.applied | default:0 }}}"
+        },
+        "policy": {
+          "join": "any"
+        }
+      },
+      {
+        "id": "risky",
+        "label": "Suspicious?",
+        "capability": "flow.if",
+        "x": 1600,
+        "y": 420,
+        "params": {
+          "condition": "{{ node.security.suspicious }} == true"
+        }
+      },
+      {
+        "id": "alert",
+        "label": "Security alert",
+        "capability": "text.template",
+        "x": 1860,
+        "y": 420,
+        "params": {
+          "template": "{\"alert\": \"suspicious message\", \"uid\": {{ run.uid | default:'' | json }}, \"score\": {{ node.security.risk_score }}, \"signals\": {{ node.security.text.security.signals | json }}}"
+        }
+      }
+    ],
+    "edges": [
+      {"from": "parse", "to": "meta"},
+      {"from": "meta", "to": "content"},
+      {"from": "content", "to": "security"},
+      {"from": "security", "to": "classify"},
+      {"from": "classify", "to": "plan"},
+      {"from": "plan", "to": "apply"},
+      {"from": "apply", "to": "apply-failed", "when": "failure"},
+      {"from": "plan", "to": "report"},
+      {"from": "apply", "to": "report", "when": "always"},
+      {"from": "security", "to": "risky"},
+      {"from": "risky", "to": "alert", "when": "case:true"}
+    ]
+  }
+}

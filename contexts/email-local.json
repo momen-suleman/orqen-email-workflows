@@ -32,6 +32,10 @@
       "value": "false"
     },
     {
+      "key": "MAIL_MODE",
+      "value": "dry-run"
+    },
+    {
       "key": "EMAIL_TOOLKIT_API_KEY",
       "secret": true
     },

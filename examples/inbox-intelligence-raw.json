@@ -1,0 +1,3 @@
+{
+  "raw": "From: Shop Example Deals <deals@shop.example.com>\r\nTo: customer@example.org\r\nSubject: This week: 30% off everything\r\nMessage-ID: <nl-2025-45@shop.example.com>\r\nList-Unsubscribe: <https://shop.example.com/unsubscribe?u=123>\r\nPrecedence: bulk\r\n\r\nThis week only: 30% off everything.\r\nShop now: https://shop.example.com/sale\r\n"
+}

@@ -16,6 +16,8 @@ TOKEN = re.compile(r"\{\{(.*?)\}\}", re.S)
 KNOWN_CAPABILITIES = {
     "text.analyze", "text.validate", "text.keyword", "ai.chat", "tool.external", "http.request",
     "text.template", "data.parse", "data.validate", "context.kv_set", "flow.if", "flow.switch",
+    "mail.message.parse", "mail.metadata.extract", "mail.content.extract", "mail.security.assess",
+    "mail.rules.classify", "mail.actions.plan", "mail.address.normalize",
 }
 FLOW = {"flow.if", "flow.switch"}
 REF_ROOTS = ("run", "ctx", "env", "node", "kv", "input", "sys")
@@ -131,7 +133,7 @@ HOSTILE = 'He said "hi" \\ then\nnew line\t{{not a ref}} </script>'
 SCOPE = {
     "run": {"message_id": "<a\"b@mail>", "from": "ada@example.org", "from_name": "Ada", "subject": HOSTILE,
             "body": HOSTILE, "to": "ada@example.org", "template_id": "welcome", "variables": {"name": "Ada"},
-            "idempotency_key": "evt-12345678"},
+            "idempotency_key": "evt-12345678", "uid": "42", "folder": "INBOX", "raw": HOSTILE},
     "ctx": {"SUPPORT_FROM": "support@example.com", "SUPPORT_TEAM_EMAIL": "team@example.com", "SUPPORT_SIGNATURE": "— Support",
             "NOTIFY_FROM": "no-reply@example.com", "DIGEST_TO": "ops@example.com", "EMAIL_AUDIT_LOG": "false", "CRM_ENABLED": "false"},
     "node": {},
@@ -156,6 +158,31 @@ class LibraryTests(unittest.TestCase):
             self.assertTrue(manifest.get(key), key)
         self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$", "library version must be semver")
         self.assertRegex(manifest["orqen"], r"^(>=|\^|=)?\d+\.\d+(\.\d+)?$", "orqen requirement")
+        for package, requirement in manifest.get("packages", {}).items():
+            self.assertRegex(package, r"^(core|mail)\.[a-z]+$", "package id")
+            self.assertRegex(requirement, r"^(>=|\^|=)?\d+\.\d+(\.\d+)?$", f"{package} requirement")
+
+    def test_mailbox_mutations_are_guarded(self):
+        """Inbox intelligence can only change a mailbox behind every guard."""
+        graph = self.workflows["email-inbox-intelligence"]["graph"]
+        nodes = {n["id"]: n for n in graph["nodes"]}
+        plan, apply = nodes["plan"], nodes["apply"]
+        self.assertIn("default:dry-run", plan["inputs"]["mode"]["value"], "dry-run unless the context opts in")
+        self.assertLessEqual(set(plan["params"]["allow"]), {"mark_read", "mark_unread", "archive"},
+                             "no destructive action is allow-listed")
+        self.assertEqual(apply["policy"]["runIf"], "{{ node.plan.mutate }} == true")
+        # Bodies are rendered before the run even when run-if skips the node,
+        # so a raw-message run (no uid) needs a default.
+        self.assertIn("run.uid | default:''", nodes["fetch"]["params"]["body"])
+        self.assertEqual(apply["policy"].get("retries", 0), 0, "a move is not idempotent: never retry it blindly")
+        self.assertEqual(apply["params"]["body"], "{{ node.plan.request }}",
+                         "the request comes from the planner, not from run input")
+        writers = [n["id"] for n in graph["nodes"]
+                   if n["capability"] == "http.request" and "mailbox.get_raw" not in n["params"].get("body", "")]
+        self.assertEqual(writers, ["apply"], "exactly one node can write")
+        ctx = json.loads((ROOT / "contexts" / "email-local.json").read_text(encoding="utf-8"))
+        mode = [v["value"] for v in ctx["variables"] if v["key"] == "MAIL_MODE"]
+        self.assertEqual(mode, ["dry-run"])
 
     def test_credentials_hold_no_literal_secrets(self):
         for name, cred in load("credentials").items():
@@ -180,6 +207,7 @@ class LibraryTests(unittest.TestCase):
             graph = wf["graph"]
             nodes = {n["id"]: n for n in graph["nodes"]}
             self.assertEqual(len(nodes), len(graph["nodes"]), f"{wname}: duplicate node ids")
+            self.assertLessEqual(len(wf.get("description", "")), 400, f"{wname}: Orqen rejects descriptions over 400 characters")
             if graph.get("inputType"):
                 self.resolve(graph["inputType"], self.types, "type")
             for node in graph["nodes"]:
@@ -233,7 +261,15 @@ class LibraryTests(unittest.TestCase):
             "draft": {"text": HOSTILE}, "intake": {"error": "Validation failed: 'from' is not a valid email"},
             "route": {"branch": "auto-reply"}, "preflight": {"body": '{"valid": true}'}, "send": {"text": "exec_1", "status": 200},
             "notify-team": {"text": "exec_2"}, "summarize": {"text": HOSTILE}, "digest": {"text": "exec_3"},
-            "fetch": {"body": "[]", "error": "HTTP 503"}, "check": {"error": "bad"},
+            "fetch": {"body": "[]", "error": "HTTP 503", "text": "{}"}, "check": {"error": "bad"},
+            "classify": {"text": json.dumps({"message": {"fingerprint": "fnv1a64:1"}}), "category": HOSTILE,
+                         "confidence": 80, "priority": "low", "labels": HOSTILE},
+            "security": {"verdict": "neutral", "risk_score": 5, "suspicious": False,
+                         "text": json.dumps({"security": {"signals": [{"id": "x", "weight": 5, "detail": HOSTILE}]}})},
+            "plan": {"text": json.dumps({"mode": "dry-run", "actions": [{"kind": "archive", "status": "dry_run", "reason": HOSTILE}]}),
+                     "needs_review": False, "mutate": False,
+                     "request": json.dumps({"action": "mailbox.apply", "uid": "42", "operations": [{"op": "archive"}]})},
+            "apply": {"text": json.dumps({"applied": 1}), "error": HOSTILE},
         }
         for wname, wf in self.workflows.items():
             scope = dict(SCOPE, node=dict(node_outputs))
@@ -252,7 +288,9 @@ class LibraryTests(unittest.TestCase):
                 if node["capability"] == "http.request" and node["params"].get("body"):
                     candidates.append(("body", node["params"]["body"]))
                 for port, src in node.get("inputs", {}).items():
-                    if isinstance(src, dict) and src.get("value", "").lstrip().startswith("{"):
+                    value = src.get("value", "").lstrip() if isinstance(src, dict) else ""
+                    # A JSON body starts with one brace; "{{" is an expression.
+                    if value.startswith("{") and not value.startswith("{{"):
                         candidates.append((f"inputs.{port}", src["value"]))
                 for where, template in candidates:
                     rendered = render(template, scope)

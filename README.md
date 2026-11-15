@@ -3,7 +3,7 @@
 Production email workflows for [Orqen](https://github.com/momen-suleman) Studio,
 delivered as an **Orqen Library**: import this repository from the Library page
 and you get connectors, credentials, an env context, input types, AI skills,
-three workflows and three missions, all wired together.
+four workflows and four missions, all wired together.
 
 Email delivery goes through
 [email-toolkit](https://github.com/momen-suleman/email-toolkit) over its REST API
@@ -23,8 +23,10 @@ pin a Studio to one by entering the tag in the Library's *ref* field.
 |---|---|---|
 | Workflow | **Support auto-reply** | Validate → enrich (CRM) → route → AI draft → policy preflight → send reply, or escalate to the team |
 | Workflow | **Transactional notification** | Validate → send a template email once per idempotency key → structured failure report |
+| Workflow | **Email Inbox Intelligence** | Fetch by IMAP UID (or take a raw message) → parse → metadata → content → security indicators → rule classification → guarded action plan → apply permitted actions. No AI |
 | Workflow | **Inbox triage digest** | Fetch unread mail → AI summary by urgency → one digest per day |
 | Mission | Support inbox webhook | `POST /api/hooks/<id>` runs Support auto-reply for each inbound email |
+| Mission | Inbox intelligence webhook | `POST /api/hooks/<id>` with `{"uid": "…"}` or `{"raw": "…"}` runs Email Inbox Intelligence |
 | Mission | Transactional email API | `POST /api/hooks/<id>` sends one notification |
 | Mission | Weekday inbox digest | 08:00 UTC Mon–Fri (installed **disabled** until IMAP is set up) |
 | Connector | Email toolkit | `http://127.0.0.1:9333`, credential *Email toolkit key* |
@@ -106,6 +108,40 @@ Client errors (4xx) are never retried: only timeouts, connection failures,
 429/408/425 and 5xx responses are. The workflow uses the *handled* status
 policy, so a failure caught by a failure branch ends **Degraded** instead of
 **Failed**.
+
+## Email Inbox Intelligence
+
+Built from Orqen's `mail.*` nodes (the manifest requires the `mail.mime`,
+`mail.rules` and `mail.mailbox` packages; an engine without them refuses the
+import). It needs email-toolkit with the `mailbox.get_raw` and `mailbox.apply`
+actions.
+
+```
+fetch (run if uid) ─▶ parse ─▶ meta ─▶ content ─▶ security ─▶ classify ─▶ plan ─┬─▶ apply (run if plan.mutate) ─failure─▶ apply-failed
+                                                     └─▶ Suspicious? ─true─▶ alert └─▶ report
+```
+
+Input is `{"uid": "<IMAP UID>", "folder": "INBOX"}` or `{"raw": "<RFC 5322 message>"}`
+(see `examples/inbox-intelligence-*.json`).
+
+**It is read-only until you change three things.** `MAIL_MODE` is `dry-run`
+in *Email local*; the plan node allow-lists only `mark_read` and `archive`,
+at confidence 70 or more; and the toolkit key needs `email.mailbox.write`.
+Start with a key scoped to `email.mailbox.read`: the report then lists what
+would happen, and the toolkit refuses any write. The apply node is never
+retried, because a move is not idempotent; a failed apply ends the run
+**Degraded** with an `apply-failed` report.
+
+| Scenario | What happens |
+|---|---|
+| Newsletter, dry-run | Report lists `mark_read`, `archive` as `dry_run`; nothing changes |
+| Newsletter, `MAIL_MODE=apply`, read-write key | Marked read, then moved to the archive folder |
+| Apply with a read-only key | Toolkit answers 403; failure branch; Degraded |
+| Suspicious message | `move:Quarantine` is `not_permitted` (not allow-listed); the alert branch runs |
+| Low confidence | Actions are `low_confidence`; `needs_review: true` |
+| Raw message | Fetch skipped; actions `unsupported` (no mailbox) |
+
+Rules, fields and the confidence formula: Orqen's `docs/EMAIL_CAPABILITIES.md`.
 
 ## Input formats
 

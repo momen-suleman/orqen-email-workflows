@@ -1,0 +1,11 @@
+{
+  "name": "Inbox intelligence webhook",
+  "description": "Run Email Inbox Intelligence for one message: POST /api/hooks/<id> with document={\"uid\": \"<IMAP UID>\", \"folder\": \"INBOX\"} (fetched through email-toolkit) or {\"raw\": \"<RFC 5322 message>\"}. Dry-run unless MAIL_MODE=apply.",
+  "workflows": [
+    "@email-inbox-intelligence"
+  ],
+  "mode": "webhook",
+  "enabled": true,
+  "env": "@email-local",
+  "defaultDocument": ""
+}
