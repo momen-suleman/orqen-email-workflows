@@ -1,0 +1,20 @@
+{
+  "name": "Inbox intelligence poll",
+  "description": "Every 5 minutes, run Email Inbox Intelligence once for each unread message it has not processed yet (up to 10 per poll). Installed disabled; dry-run unless MAIL_MODE=apply.",
+  "workflows": [
+    "@email-inbox-intelligence"
+  ],
+  "mode": "scheduled",
+  "scheduleEverySecs": 300,
+  "enabled": false,
+  "env": "@email-local",
+  "defaultDocument": "",
+  "feed": {
+    "connector": "@email-toolkit",
+    "path": "/mailbox?unseen_only=true&limit=20",
+    "select": "messages",
+    "key": "uid",
+    "with": {"folder": "INBOX"},
+    "max": 10
+  }
+}

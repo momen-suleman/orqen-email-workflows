@@ -1,6 +1,6 @@
 {
   "name": "Orqen Email Workflows",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "orqen": ">=0.10.0",
   "description": "Production email workflows for Orqen: AI-drafted support replies with policy preflight and escalation, transactional notifications, and a scheduled inbox digest — built on email-toolkit through an authenticated connector.",
   "packages": {

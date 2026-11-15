@@ -3,7 +3,7 @@
 Production email workflows for [Orqen](https://github.com/momen-suleman) Studio,
 delivered as an **Orqen Library**: import this repository from the Library page
 and you get connectors, credentials, an env context, input types, AI skills,
-four workflows and four missions, all wired together.
+four workflows and five missions, all wired together.
 
 Email delivery goes through
 [email-toolkit](https://github.com/momen-suleman/email-toolkit) over its REST API
@@ -26,6 +26,7 @@ pin a Studio to one by entering the tag in the Library's *ref* field.
 | Workflow | **Email Inbox Intelligence** | Fetch by IMAP UID (or take a raw message) → parse → metadata → content → security indicators → rule classification → guarded action plan → apply permitted actions. No AI |
 | Workflow | **Inbox triage digest** | Fetch unread mail → AI summary by urgency → one digest per day |
 | Mission | Support inbox webhook | `POST /api/hooks/<id>` runs Support auto-reply for each inbound email |
+| Mission | Inbox intelligence poll | Every 5 minutes, runs Email Inbox Intelligence once per unread message not processed before (installed **disabled**) |
 | Mission | Inbox intelligence webhook | `POST /api/hooks/<id>` with `{"uid": "…"}` or `{"raw": "…"}` runs Email Inbox Intelligence |
 | Mission | Transactional email API | `POST /api/hooks/<id>` sends one notification |
 | Mission | Weekday inbox digest | 08:00 UTC Mon–Fri (installed **disabled** until IMAP is set up) |
@@ -140,6 +141,11 @@ retried, because a move is not idempotent; a failed apply ends the run
 | Suspicious message | `move:Quarantine` is `not_permitted` (not allow-listed); the alert branch runs |
 | Low confidence | Actions are `low_confidence`; `needs_review: true` |
 | Raw message | Fetch skipped; actions `unsupported` (no mailbox) |
+
+**Automatic processing.** Enable *Inbox intelligence poll* once the dry-run
+reports look right. It polls email-toolkit for unread mail and runs each new
+message once (it remembers UIDs, retries a failed message three times, and
+needs an Orqen build with mission feeds).
 
 Rules, fields and the confidence formula: Orqen's `docs/EMAIL_CAPABILITIES.md`.
 

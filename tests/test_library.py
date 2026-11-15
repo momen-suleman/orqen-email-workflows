@@ -305,6 +305,14 @@ class LibraryTests(unittest.TestCase):
             self.assertIn(ms["mode"], {"manual", "scheduled", "webhook", "agent"}, name)
             for ref in ms["workflows"]:
                 self.resolve(ref, wf_refs, "workflow")
+            feed = ms.get("feed")
+            if feed:
+                self.resolve(feed["connector"], self.connectors, "connector")
+                self.assertTrue(feed["path"].startswith("/"), name)
+                self.assertRegex(feed["key"], r"^[A-Za-z0-9_-]+$", name)
+                self.assertLessEqual(feed.get("max", 10), 50, name)
+                self.assertEqual(ms["mode"], "scheduled", f"{name}: a feed is polled by the scheduler")
+                self.assertFalse(ms.get("enabled", True), f"{name}: a polling mission must install disabled")
             if ms["mode"] == "scheduled":
                 self.assertTrue(ms.get("scheduleAt") or ms.get("scheduleEverySecs"), name)
                 if ms.get("scheduleAt"):
